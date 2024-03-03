@@ -1,11 +1,19 @@
+from io import StringIO
 from numpy.typing import NDArray
 from peak import Peak
-import utils
-import scipy.signal
 import matplotlib.pyplot as plt
 import numpy as np
 import re
-from io import StringIO
+import scipy.signal
+import utils
+
+# Default peak-finding parameters
+DEFAULT_PEAK_NORMALIZE = False # whether to normalize the y values to be >= 0 before peak detection
+DEFAULT_PEAK_DISTANCE = 75 # number of data points between peaks
+DEFAULT_PEAK_PROMINENCE = .15 # minimum peak prominence
+DEFAULT_PEAK_MIN_WIDTH = 10 # minimum number of data points
+DEFAULT_PEAK_MAX_WIDTH = 1000 # maximum number of data points
+DEFAULT_PEAK_RELATIVE_HEIGHT = .95 # number between 0 and 1. used for determining left and right peak thresholds
 
 class ChromatogramRun:
     """
@@ -20,28 +28,28 @@ class ChromatogramRun:
         try:
             with open(filepath, 'r') as f:
                 content = f.read()
-                section_title_regex = r'^(.+?:)\n' # match any line ending with a colon
-                # split the file into sections based on section titles
-                sections = re.split(section_title_regex, content, flags=re.MULTILINE)
-                # extract all key value pair sections into a metadata dictionary
-                self.metadata = {
-                    **utils.parse_key_value_pairs(sections[0].strip()),
-                    "injection_info": utils.parse_key_value_pairs(sections[2].strip()),
-                    "chromatogram_data_info": utils.parse_key_value_pairs(sections[4].strip()),
-                    "signal_parameter_info": utils.parse_key_value_pairs(sections[6].strip()),
-                }
-
-                # parse the chromatogram data into a structured NumPy array
-                self.data = self.parse_chromatogram_data(sections[8].strip())
-
-                self.normalized = False
-
-                # initialize the peaks using the default peak finding parameters
-                self.peaks = self.find_peaks()
+                self.parse_file(content)
+                self.normalized = DEFAULT_PEAK_NORMALIZE
+                self.peaks = self.find_peaks() # find peaks using default parameters
 
         except FileNotFoundError:
             print(f"File {filepath} not found.")
             return None
+
+    def parse_file(self, content: str):
+        section_title_regex = r'^(.+?:)\n' # match any line ending with a colon
+        # split the file into sections based on section titles
+        sections = re.split(section_title_regex, content, flags=re.MULTILINE)
+        # extract all key value pair sections into a metadata dictionary
+        self.metadata = {
+            **utils.parse_key_value_pairs(sections[0].strip()),
+            "injection_info": utils.parse_key_value_pairs(sections[2].strip()),
+            "chromatogram_data_info": utils.parse_key_value_pairs(sections[4].strip()),
+            "signal_parameter_info": utils.parse_key_value_pairs(sections[6].strip()),
+        }
+
+        # parse the chromatogram data into a structured NumPy array
+        self.data = self.parse_chromatogram_data(sections[8].strip())
 
     @staticmethod
     def parse_chromatogram_data(content: str) -> NDArray:
@@ -70,12 +78,12 @@ class ChromatogramRun:
 
     def find_peaks(
         self,
-        normalize: bool = False, # whether to normalize the y values to be >= 0 before peak detection
-        distance: int = 75, # number of data points between peaks
-        prominence: float = .15, # minimum peak prominence
-        min_width: int = 10, # minimum number of data points
-        max_width: int = 1000, # maximum number of data points
-        relative_height: float = .95, # number between 0 and 1. used for determining left and right peak thresholds
+        normalize: bool = DEFAULT_PEAK_NORMALIZE,
+        distance: int = DEFAULT_PEAK_DISTANCE,
+        prominence: float = DEFAULT_PEAK_PROMINENCE,
+        min_width: int = DEFAULT_PEAK_MIN_WIDTH,
+        max_width: int = DEFAULT_PEAK_MAX_WIDTH,
+        relative_height: float = DEFAULT_PEAK_RELATIVE_HEIGHT,
     ) -> list[Peak]:
         """
         Identifies peaks in the chromatogram data. The input peak finding
