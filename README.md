@@ -8,19 +8,17 @@ This project includes a set of Python classes designed to analyze chromatogram d
 
 Responsible for loading chromatogram data from a file, finding peaks, and plotting the chromatogram.
 
-`find_peaks()`: Identifies peaks in the chromatogram data based on specified criteria.
+`find_peaks()`: Identifies peaks in the chromatogram data based on specified criteria. The method returns a list of Peak objects.
 
 `plot()`: Plots the chromatogram and optionally displays peak widths and elution volumes.
 
-`total_elution_volume`: The total elution volume of all peaks in the chromatogram.
+`elution_volumes`: The elution volume of each peaks in the chromatogram.
 
 ### Peak
 
 Represents a single peak in the chromatogram, including its properties and methods to visualize and integrate the peak.
 
 `plot()`: Plots the peak against the full chromatogram data.
-
-`integrate()`: Calculates the elution volume of the peak using Simpson method.
 
 ### How to Use
 

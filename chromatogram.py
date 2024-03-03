@@ -1,42 +1,43 @@
 from numpy.typing import NDArray
 from peak import Peak
-from utils import normalize, parse_key_value_pairs
-from scipy.signal import find_peaks
+import utils
+import scipy.signal
 import matplotlib.pyplot as plt
 import numpy as np
 import re
+from io import StringIO
 
 class ChromatogramRun:
-
-    # Default peak finding parameters (see: https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.find_peaks.html)
-    DISTANCE: int = 75 # number of data points between peaks
-    MIN_HEIGHT: float = .15 # number of standard deviations above the mean
-    MIN_WIDTH: int = 10 # number of data points
-    MAX_WIDTH: int = 1000 # number of data points
-    RELATIVE_HEIGHT: float = .95 # number between 0 and 1
-
-    # Default integration parameters
-    NORMALIZE: bool = False # normalize y values to be >= 0 before peak detection
-
-    # Default plotting parameters
-    SHOW_WIDTHS: bool = True # show the widths of the peaks on the plot
-    SHOW_ELUSTION_VOLUMES: bool = True # show the integrals of the peaks on the plot
+    """
+    A class for parsing and analyzing chromatogram data.
+    """
 
     def __init__(self, filepath: str):
+        """
+        Args:
+        - filepath: The path to the file containing the chromatogram data.
+        """
         try:
             with open(filepath, 'r') as f:
                 content = f.read()
+                section_title_regex = r'^(.+?:)\n' # match any line ending with a colon
                 # split the file into sections based on section titles
-                sections = re.split(r'^(.+?:)\n', content, flags=re.MULTILINE)
-
+                sections = re.split(section_title_regex, content, flags=re.MULTILINE)
+                # extract all key value pair sections into a metadata dictionary
                 self.metadata = {
-                    **parse_key_value_pairs(sections[0].strip()),
-                    "injection_info": parse_key_value_pairs(sections[2].strip()),
-                    "chromatogram_data_info": parse_key_value_pairs(sections[4].strip()),
-                    "signal_parameter_info": parse_key_value_pairs(sections[6].strip()),
+                    **utils.parse_key_value_pairs(sections[0].strip()),
+                    "injection_info": utils.parse_key_value_pairs(sections[2].strip()),
+                    "chromatogram_data_info": utils.parse_key_value_pairs(sections[4].strip()),
+                    "signal_parameter_info": utils.parse_key_value_pairs(sections[6].strip()),
                 }
 
+                # parse the chromatogram data into a structured NumPy array
                 self.data = self.parse_chromatogram_data(sections[8].strip())
+
+                self.normalized = False
+
+                # initialize the peaks using the default peak finding parameters
+                self.peaks = self.find_peaks()
 
         except FileNotFoundError:
             print(f"File {filepath} not found.")
@@ -55,123 +56,82 @@ class ChromatogramRun:
         Returns:
         - A structured NumPy array with columns for time, step, and value.
         """
-        lines = content.strip().split("\n")[1:] # skip the header with the column names
-        data_tuples = []
-        for line in lines:
-            columns = line.split('\t')
-            if len(columns) == 3:
-                time, step, value = columns
-                try:
-                    step = float(step.replace('n.a.', "0.0"))  # Convert 'n.a.' to 0 for scipy handling
-                    time, value = float(time), float(value)
-                    data_tuples.append((time, step, value))
-                except ValueError: # Handle lines that cannot be converted to float
-                    print(f"Skipping invalid line: {line}")
-            else:
-                print(f"Skipping malformed line: {line}, expected 3 columns, got {len(columns)}.")
+        content_io = StringIO(content)
 
-        # Convert the list of tuples to a structured NumPy array with named columns
-        data_array = np.array(data_tuples, dtype=[('time', 'f4'), ('step', 'f4'), ('value', 'f4')])
-        # NOTE: assumes higher float precision will not needed
+        # Define a converter for the 'step' column to handle 'n.a.' values
+        filter_na = lambda s: np.float32(s.decode('utf-8').replace('n.a.', '0.0'))
+
+        # see https://numpy.org/doc/stable/reference/generated/numpy.genfromtxt.html
+        dtype = [('time', 'f4'), ('step', 'f4'), ('value', 'f4')]
+        data_array = np.genfromtxt(content_io, delimiter='\t', skip_header=1,
+                                    converters={0: filter_na, 1: filter_na, 2: filter_na}, dtype=dtype,
+                                    missing_values='', filling_values=0.0)
         return data_array
 
     def find_peaks(
         self,
-        normalize: bool = False,
-        min_height: float | None = None,
-        distance: int | None = None,
-        min_width: int | None = None,
-        max_width: int | None = None,
-        relative_height: float | None = None
+        normalize: bool = False, # whether to normalize the y values to be >= 0 before peak detection
+        distance: int = 75, # number of data points between peaks
+        prominence: float = .15, # minimum peak prominence
+        min_width: int = 10, # minimum number of data points
+        max_width: int = 1000, # maximum number of data points
+        relative_height: float = .95, # number between 0 and 1. used for determining left and right peak thresholds
     ) -> list[Peak]:
         """
         Identifies peaks in the chromatogram data. The input peak finding
-        parameters override the default parameters defined on the class.
+        parameters override the default parameters defined on the class. See
+        https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.find_peaks.html
+        for more information on the peak finding parameters.
 
         Args:
-        - normalize: Whether to normalize the y values to be >= 0 before peak detection.
-        - min_height: Minimum height of peaks as number of standard deviations above the mean.
+        - normalize: Whether to normalize the y values to be >= 0 before peak
+            detection.
         - distance: Minimum number of samples between successive peaks.
+        - prominence: Minimum peak prominence.
         - min_width: Minimum width of peaks in number of samples.
         - max_width: Maximum width of peaks in number of samples.
-        - relative_height: The height of peaks as a fraction of the maximum peak height.
+        - relative_height: The height of peaks as a fraction of the maximum peak
+            height. Used to determine the left and right thresholds.
 
         Returns:
         List of peak instances
         """
-        # update normalization parameter
-        if normalize: self.NORMALIZE = normalize
+        if normalize: self.normalized = True
 
-        # set the peak finding parameters based on the input and defaults
-        height = (min_height if min_height else self.MIN_HEIGHT) * np.std(self.y) + np.mean(self.y)
-        distance = distance if distance else self.DISTANCE
-        min_width = min_width if min_width else self.MIN_WIDTH
-        max_width = max_width if max_width else self.MAX_WIDTH
-        width = [min_width, max_width]
-
-        # find the peaks
-        peaks, properties = find_peaks(
-            x=self.y,
-            height=height,
+        peaks, properties = scipy.signal.find_peaks(
+            x=self.values,
+            prominence=prominence,
             distance=distance,
-            width=width,
-            rel_height=self.RELATIVE_HEIGHT
+            width=[min_width, max_width],
+            rel_height=relative_height,
         )
 
-        # convert returned peaks to list of peak instances
-        peaks_list = []
-        for i, peak in enumerate(peaks):
-            left_threshold_index = round(properties["left_ips"][i])
-            right_threshold_index = round(properties["right_ips"][i])
-            peak_instance = Peak(
-                index = peak,
-                time = float(self.x[peak]),
-                left_threshold = float(self.x[left_threshold_index]),
-                right_threshold =  float(self.x[right_threshold_index]),
-                left_threshold_index = left_threshold_index,
-                right_threshold_index = right_threshold_index,
-                height = float(self.y[peak]),
-                x_data = self.x[left_threshold_index:right_threshold_index+1],
-                y_data = self.y[left_threshold_index:right_threshold_index+1]
-            )
-
-            peaks_list.append(peak_instance)
-        return peaks_list
+        self.peaks = [Peak(
+            index=peak,
+            left_threshold_index=round(properties["left_ips"][i]), # NOTE: round the threshold indices to ints
+            right_threshold_index=round(properties["right_ips"][i]),
+            x_data=self.times,
+            y_data=self.values if normalize else self.values,
+        ) for i, peak in enumerate(peaks)]
+        return self.peaks
 
     @property
-    def x(self):
-        """
-        Returns the x values of the chromatogram data.
-        """
+    def times(self) -> NDArray[np.float32]:
         return self.data['time']
 
     @property
-    def y(self):
-        """
-        Returns the y values of the chromatogram data. Optionally normalizes the
-        values to be >= 0.
-        """
-        return normalize(self.data['value']) if self.NORMALIZE else self.data['value']
+    def values(self) -> NDArray[np.float32]:
+        return utils.normalize(self.data['value']) if self.normalized else self.data['value']
 
-    @property
-    def elution_volumes(self):
-        """
-        Returns the elution volumes of each peaks in the chromatogram.
-        """
-        peaks = self.find_peaks()
-        elution_volumes = [peak.integrate() for peak in peaks]
-        return elution_volumes
 
-    @property
-    def total_elution_volume(self):
+    def elution_volumes(self) -> list[np.float32]:
         """
-        Returns the total elution volume of the peaks in the chromatogram.
+        Returns the elution volumes of each peaks.
         """
-        return sum(self.elution_volumes)
+        return [peak.area for peak in self.peaks]
 
     def plot(
         self,
-        peaks: list[Peak] | None = None,
         show_widths: bool = False,
         show_elution_volumes: bool = False
     ):
@@ -183,23 +143,22 @@ class ChromatogramRun:
         - show_widths: Whether to show the peak widths.
         - show_elution_volumes: Whether to show the elution volumes.
         """
-        peaks = peaks if peaks else self.find_peaks()
-        peak_x = [peak.time for peak in peaks]
-        peak_y = [peak.height for peak in peaks]
-        elution_volumes = self.elution_volumes
-        for i, peak in enumerate(peaks):
-            if show_widths or self.SHOW_ELUSTION_VOLUMES:
-                plt.text(peak.time + 0.1, peak.height + 0.1, f"{elution_volumes[i]:.2f}", fontsize=6)
-            if show_elution_volumes or self.SHOW_WIDTHS:
+        peak_times = [peak.time for peak in self.peaks]
+        peak_values = [peak.height for peak in self.peaks]
+
+        # plot each peak, optionally with widths and elution volumes
+        for i, peak in enumerate(self.peaks):
+            if show_elution_volumes:
+                plt.text(peak.time, peak.height, f"{self.elution_volumes()[i]:.2f}", fontsize=6)
+            if show_widths:
                 plt.axvline(peak.left_threshold, color='grey', linestyle='--', linewidth=0.5)
                 plt.axvline(peak.right_threshold, color='grey', linestyle='--', linewidth=0.5)
 
-        plt.plot(self.x, self.y)
-        plt.plot(peak_x, peak_y, 'ro', markersize=3)
+        plt.plot(self.times, self.values) # full chromatogram data
+        plt.plot(peak_times, peak_values, 'ro', markersize=3) # peak data
         plt.xlabel('Time (min)')
         plt.ylabel('Value (EU)')
-        plt.title(f'Chromatogram (Elution Volume: {self.total_elution_volume:.2f})')
-
+        plt.title(f'Chromatogram data')
         plt.show()
 
     def __str__(self):

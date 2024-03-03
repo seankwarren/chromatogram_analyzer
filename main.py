@@ -3,22 +3,25 @@ from chromatogram import ChromatogramRun
 if __name__ == "__main__":
     run = ChromatogramRun('test_data.txt')
 
-    # Find the peaks in the chromatogram
-    peaks = run.find_peaks(
-        normalize=True, # this will normalize the y values to be >= 0 preventing negative values for elution volume
-        min_height=.15,
+    # The peaks are already found and stored using the default peak-finding parameters
+    run.peaks
+
+    # To find peaks using custom parameters:
+    run.find_peaks(
+        normalize=True,
         distance=75,
         min_width=10,
         max_width=1000,
         relative_height=0.95
     )
 
-    # Plot the chromatogram with peaks. Uncomment to see the plot
-    # run.plot(peaks, show_widths=False, show_elution_volumes=True)
+    # Print each peak including elution volumes.
+    [print(peak) for peak in run.peaks]
+
+    # Plot the chromatogram with peaks.
+    run.plot(show_widths=True, show_elution_volumes=True)
 
     # Plot each peak individually to verify the peak detection and integration
     # Uncomment to see the plots
-    # for peak in peaks:
-    #    peak.plot(run.x, run.y)
-
-    print("Elusion volume (EU): ", run.total_elution_volume)
+    # for peak in run.peaks:
+    #    peak.plot(run.times, run.values)

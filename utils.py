@@ -1,8 +1,35 @@
 from numpy.typing import NDArray
-import numpy as np
+from scipy.integrate import simpson
 from slugify import slugify
+import numpy as np
 
-def parse_key_value_pairs(content: str):
+
+def integrate(
+    x_data: NDArray[np.float32],
+    y_data: NDArray[np.float32],
+    method: str = 'simpson'
+) -> np.float32:
+    """
+    Returns the area under the peak using Simpson's rule.
+    see: https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.simpson.html
+
+    Args:
+    - x_data: The x values of the peak.
+    - y_data: The y values of the peak.
+    - method: The integration method to use. Currently only 'simpson' is supported.
+
+    Returns:
+    -  The area under the peak.
+
+    Raises:
+    - ValueError: If the integration method is not supported.
+    """
+    match method:
+        case 'simpson':
+            return np.float32(simpson(x=x_data, y=y_data))
+        case _:
+            raise ValueError(f"Unsupported integration method: {method}")
+def parse_key_value_pairs(content: str) -> dict:
     """
     Parses a tab-delimited string of key-value pairs into a dictionary. Assumes
     each line is a key-value pair separated by a tab. If a line has no tab, the
@@ -39,7 +66,7 @@ def slugify_key(text: str, separator: str = '_') -> str:
     """
     return slugify(text, separator=separator)
 
-def normalize(values: NDArray) -> NDArray:
+def normalize(values: NDArray[np.float32]) -> NDArray[np.float32]:
     """
     Normalizes a list of values to the range [0, inf].
 

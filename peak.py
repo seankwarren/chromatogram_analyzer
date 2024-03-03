@@ -1,60 +1,61 @@
 from numpy.typing import NDArray
-from scipy.integrate import simpson
+from utils import integrate
 import matplotlib.pyplot as plt
 import numpy as np
 
 class Peak:
+    """
+    A class for representing a peak in chromatogram data.
+    """
+
     def __init__(
         self,
         index: int,
-        time: float,
-        left_threshold: float,
         left_threshold_index: int,
-        right_threshold:float,
         right_threshold_index: int,
-        height: float,
-        x_data: NDArray,
-        y_data: NDArray
+        x_data: NDArray[np.float32],
+        y_data: NDArray[np.float32]
     ):
+        """
+        Args:
+        - index: The index of the peak in the chromatogram data.
+        - left_threshold_index: The index of the left threshold of the peak.
+        - right_threshold_index: The index of the right threshold of the peak.
+        - x_data: The x values of the peak.
+        - y_data: The y values of the peak.
+        """
         self.index = index
-        self.time = time
-        self.left_threshold = left_threshold
-        self.right_threshold = right_threshold
-        self.left_threshold_index = left_threshold_index
-        self.right_threshold_index = right_threshold_index
-        self.height = height
-        self.x = x_data
-        self.y = y_data
+        self.time = x_data[index]
+        self.left_threshold = x_data[left_threshold_index]
+        self.right_threshold =  x_data[right_threshold_index]
+        self.height = y_data[index]
+        self.times = x_data[left_threshold_index:right_threshold_index+1]
+        self.values = y_data[left_threshold_index:right_threshold_index+1]
+        self.area = integrate(self.times, self.values)
 
-    def __str__(self):
+    def __repr__(self):
         return f"""Peak(
-            index={self.index},
-            time={self.time},
-            left_threshold={self.left_threshold},
-            right_threshold={self.right_threshold},
-            left_threshold_index={self.left_threshold_index},
-            right_threshold_index={self.right_threshold_index},
-            height={self.height})
-            volume={self.integrate()}"""
+    time={self.time} (min),
+    height={self.height} (EU),
+    left_threshold={self.left_threshold} (min),
+    right_threshold={self.right_threshold} (min),
+    area={self.area} (EU * min)
+)"""
 
-    def plot(self, full_x_data = None, full_y_data = None):
-        if (full_x_data is not None and full_y_data is None) or (full_x_data is None and full_y_data is not None):
-            raise ValueError("Both full_x_data and full_y_data must be provided")
+    def plot(self, full_time_data: NDArray[np.float32], full_value_data: NDArray[np.float32]):
+        """
+        Plots the peak on top of the full chromatogram data.
 
-        if full_x_data is not None and full_y_data is not None:
-            plt.plot(full_x_data, full_y_data, 'grey', linewidth=0.5)
-
-        plt.title(f"Peak {self.index}")
+        Args:
+        - full_time_data: The x values of the full chromatogram data.
+        - full_value_data: The y values of the full chromatogram data.
+        """
+        plt.plot(full_time_data, full_value_data, 'grey', linewidth=0.5) # full data
+        plt.plot(self.times, self.values, 'b') # peak data
+        plt.plot (self.time, self.height, 'ro', markersize=3) # peak marker
+        plt.axvline(self.left_threshold, color='gray', linestyle='--', linewidth=0.5) # left threshold
+        plt.axvline(self.right_threshold, color='gray', linestyle='--', linewidth=0.5) # right threshold
+        plt.title(f"Peak (@ t={self.time} min)")
         plt.xlabel('Time (min)')
         plt.ylabel('Value (EU)')
-        plt.plot(self.x, self.y, 'b')
-        # peak marker
-        plt.plot (self.time, self.height, 'ro', markersize=3)
-        # threshold markers
-        plt.axvline(self.left_threshold, color='gray', linestyle='--', linewidth=0.5)
-        plt.axvline(self.right_threshold, color='gray', linestyle='--', linewidth=0.5)
-
         plt.show()
-
-    def integrate(self):
-        return simpson(y=self.y, x=self.x)
