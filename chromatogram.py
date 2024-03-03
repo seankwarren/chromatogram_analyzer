@@ -28,15 +28,24 @@ class ChromatogramRun:
         try:
             with open(filepath, 'r') as f:
                 content = f.read()
-                self.parse_file(content)
-                self.normalized = DEFAULT_PEAK_NORMALIZE
-                self.peaks = self.find_peaks() # find peaks using default parameters
+                self._parse_file(content)
+                self._normalized = DEFAULT_PEAK_NORMALIZE
 
         except FileNotFoundError:
             print(f"File {filepath} not found.")
             return None
 
-    def parse_file(self, content: str):
+    def _parse_file(self, content: str):
+        """
+        Parses the file content into metadata and chromatogram data.
+
+        Args:
+        - content: The content of the file.
+
+        Side effects:
+        - Sets the metadata and data attributes of the ChromatogramRun instance.
+        """
+
         section_title_regex = r'^(.+?:)\n' # match any line ending with a colon
         # split the file into sections based on section titles
         sections = re.split(section_title_regex, content, flags=re.MULTILINE)
@@ -104,7 +113,7 @@ class ChromatogramRun:
         Returns:
         List of peak instances
         """
-        if normalize: self.normalized = True
+        if normalize: self._normalized = True
 
         peaks, properties = scipy.signal.find_peaks(
             x=self.values,
@@ -129,7 +138,7 @@ class ChromatogramRun:
 
     @property
     def values(self) -> NDArray[np.float32]:
-        return utils.normalize(self.data['value']) if self.normalized else self.data['value']
+        return utils.normalize(self.data['value']) if self._normalized else self.data['value']
 
 
     def elution_volumes(self) -> list[np.float32]:

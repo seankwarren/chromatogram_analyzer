@@ -49,10 +49,10 @@ Place your chromatogram data file(s) in a known directory. Data files should be 
 ##### Analyze Your Data
 
 Instantiate a `ChromatogramRun` with the path to your data file.
-Use peaks property to access the peaks found with default peak-finding parameters or the `find_peaks()` method to identify peaks with custom parameters.
-Plot the chromatogram and peaks using the `plot()` method.
-Investigate the properties of individual peaks, such as elution volume, using the `Peak.plot()` method.
-View the elution volumes via the `elution_volumes` property.
+Use the `find_peaks()` method to identify peaks with custom parameters, then access the peaks via the `peaks` property of the `ChromatogramRun`.
+Plot the chromatogram and the found peaks using the `plot()` method.
+Investigate the properties of individual peaks using the `Peak.plot()` method.
+View the elution volumes of each peak on the plots or via the `elution_volumes` property.
 
 ### Running the Main Script
 

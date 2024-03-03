@@ -3,11 +3,11 @@ from chromatogram import ChromatogramRun
 if __name__ == "__main__":
     run = ChromatogramRun('test_data.txt')
 
-    # The peaks are already found and stored using the default peak-finding parameters
-    run.peaks
+    # To find peaks using default parameters:
+    peaks = run.find_peaks()
 
     # To find peaks using custom parameters:
-    run.find_peaks(
+    peaks = run.find_peaks(
         normalize=True,
         distance=75,
         min_width=10,

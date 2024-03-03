@@ -29,6 +29,7 @@ def integrate(
             return np.float32(simpson(x=x_data, y=y_data))
         case _:
             raise ValueError(f"Unsupported integration method: {method}")
+
 def parse_key_value_pairs(content: str) -> dict:
     """
     Parses a tab-delimited string of key-value pairs into a dictionary. Assumes
