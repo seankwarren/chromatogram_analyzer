@@ -26,8 +26,16 @@ Represents a single peak in the chromatogram, including its properties and metho
 
 ##### Set Up Your Environment
 
+Create a virtual environment:
+
 ```bash
 python -m venv .venv
+```
+
+Activate the virtual environment:
+
+```bash
+source .venv/bin/activate
 ```
 
 Install required packages:
